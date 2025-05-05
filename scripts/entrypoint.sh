@@ -4,7 +4,7 @@ set -e
 # SteamCMD 경로 수정
 STEAMCMD="/home/steam/steamcmd/steamcmd.sh"
 
-FEXBash
+exec FEXBash
 
 # 서버 업데이트
 $STEAMCMD +login anonymous \
