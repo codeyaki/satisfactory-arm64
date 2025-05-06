@@ -2,20 +2,23 @@ services:
   satisfactory:
     build: .
     container_name: satisfactory-arm64
-    hostname: satisfactory-prod
+    hostname: satisfactory-arm64
     restart: unless-stopped
     ports:
       - "7777:7777/tcp"
       - "7777:7777/udp"
       - "8888:8888/tcp"
     volumes:
-      - ./server-data:/satisfactory/server-data
-      - ./steamcmd:/home/steam/Steam
+      #      - "./steamcmd:/home/steam/steamcmd"
+      - "./satisfactory-server:/config"
     environment:
       - MAXPLAYERS=4
       - SERVER_NAME=sss_world
       - SERVER_PASSWORD=${SERVER_PASSWORD}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}a
+      - PGID=1000
+      - PUID=1000
+      - STEAMBETA=false
     deploy:
       resources:
         limits:
@@ -24,16 +27,3 @@ services:
         reservations:
           memory: 16G
           cpus: '2.5'
-
-volumes:
-  server-data:
-    driver_opts:
-      type: none
-      device: ./server-data
-      o: bind
-  steamcmd:
-    driver_opts:
-      type: none
-      device: ./steamcmd
-      o: bind
-

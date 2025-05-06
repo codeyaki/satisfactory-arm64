@@ -1,7 +1,11 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ARG GID=1000
+ARG UID=1000
+ARG FEX_UID=1001
 
+#FEX 에뮬 관련
 ENV CMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu/cmake/Qt5
 
 RUN apt-get update && \
@@ -36,8 +40,8 @@ RUN apt-get update && \
     qtdeclarative5-dev qml-module-qtquick2 \
     binfmt-support
 
-RUN useradd -m -s /bin/bash fex && \
-    usermod -aG sudo fex && \
+RUN sudo useradd -u ${FEX_UID} -m -s /bin/bash fex && \
+    sudo usermod -aG sudo fex && \
     echo "fex ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/fex
 
 USER fex
@@ -56,7 +60,8 @@ WORKDIR /home/fex/FEX/Build
 RUN sudo ninja install && \
     sudo update-binfmts --enable
 
-RUN sudo useradd -m -s /bin/bash steam && \
+RUN sudo groupadd -g ${GID} steam && \
+    sudo useradd -u ${UID} -g ${GID} -m -s /bin/bash steam && \
     sudo apt-get update && \
     sudo apt-get install -y wget
 
@@ -76,12 +81,70 @@ WORKDIR /home/steam/.fex-emu
 
 RUN echo '{"Config":{"RootFS":"Ubuntu_22_04"}}' > ./Config.json
 
-WORKDIR /home/steam/Steam
+WORKDIR /home/steam/steamcmd
 
-RUN curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf -
+RUN curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf - && \
+    chown -R steam:steam .
 
-COPY ./scripts/entrypoint.sh /entrypoint.sh
+RUN FEXInterpreter /home/steam/steamcmd/steamcmd.sh +quit
+
 USER root
-RUN chmod +x /entrypoint.sh
-USER steam
-ENTRYPOINT ["/entrypoint.sh"]
+
+WORKDIR ~
+
+#satisfactory 서버 시작
+ENV AUTOSAVENUM="5" \
+    DEBIAN_FRONTEND="noninteractive" \
+    DEBUG="false" \
+    DISABLESEASONALEVENTS="false" \
+    GAMECONFIGDIR="/config/gamefiles/FactoryGame/Saved" \
+    GAMESAVESDIR="/home/steam/.config/Epic/FactoryGame/Saved/SaveGames" \
+    LOG="true" \
+    MAXOBJECTS="2162688" \
+    MAXPLAYERS="4" \
+    MAXTICKRATE="30" \
+    MULTIHOME="::" \
+    PGID="1000" \
+    PUID="1000" \
+    SERVERGAMEPORT="7777" \
+    SERVERMESSAGINGPORT="8888" \
+    SERVERSTREAMING="true" \
+    SKIPUPDATE="false" \
+    STEAMAPPID="1690800" \
+    STEAMBETA="false" \
+    TIMEOUT="30" \
+    VMOVERRIDE="false" \
+    STEAMBETA="false" \
+    SKIPUPDATE="false"
+
+# hadolint ignore=DL3008
+RUN set -x \
+ && sudo apt-get update \
+ && sudo apt-get install -y gosu xdg-user-dirs curl jq tzdata --no-install-recommends \
+ && sudo rm -rf /var/lib/apt/lists/* \
+# && sudo groupmod -g ${GID} steam \
+# && sudo usermod -u ${UID} steam \
+ && sudo mkdir -p /home/steam/.local/share/Steam/ \
+ && sudo mkdir -p /tmp/dumps/ \
+# && sudo cp -R /root/.local/share/Steam/steamcmd/ /home/steam/.local/share/Steam/steamcmd/ \
+# && sudo chown -R ${UID}:${GID} /home/steam/.local/ \
+ && gosu nobody true
+
+RUN sudo mkdir -p /config \
+ && sudo chown steam:steam /config
+
+COPY ./scripts/init.sh /
+COPY --chown=steam:steam ./scripts/healthcheck.sh ./scripts/run.sh /home/steam/
+
+RUN sudo chmod +x /init.sh /home/steam/healthcheck.sh /home/steam/run.sh
+
+HEALTHCHECK --timeout=30s --start-period=300s CMD bash /home/steam/healthcheck.sh
+
+WORKDIR /config
+ARG VERSION="DEV"
+ENV VERSION=$VERSION
+LABEL version=$VERSION
+STOPSIGNAL SIGINT
+EXPOSE 7777/udp 7777/tcp 8888/tcp
+
+ENTRYPOINT ["/init.sh" ]

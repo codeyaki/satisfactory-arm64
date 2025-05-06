@@ -1,2 +1,4 @@
 .env
-/game-data/**
+/game-data/
+/satisfactory-server/
+/.idea/
